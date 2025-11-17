@@ -1,4 +1,4 @@
-name: cachequant
+name: equant
 channels:
   - pytorch
   - defaults
