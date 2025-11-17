@@ -23,6 +23,7 @@ bash mainldm/scripts/download_models.sh
 #### Please download all original datasets used for evaluation from each dataset’s official website.
 ---
 ## 🔧 Example Usage
+#### These commands has to be run in sequence for image generation
 ```bash
 python ./mainldm/celeb_cali.py
 ```
