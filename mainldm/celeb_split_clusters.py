@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 def load_model_for_layer_info():
-    """Load model to get layer information"""
     import sys
     sys.path.append("./mainldm")
     from omegaconf import OmegaConf
@@ -32,7 +31,6 @@ def split_single_cluster_file(cluster_file_path, output_dir, model):
     
     logger.info(f"Cluster file contents: {cluster_data.keys()}")
     
-    # Check if this is a single combined file
     if 'clusters' in cluster_data and 'assignments' in cluster_data and 'densities' in cluster_data:
         logger.info("Detected single combined cluster file")
         logger.info(f"Total clusters: {len(cluster_data['clusters'])}")
@@ -77,22 +75,17 @@ def create_per_layer_clusters_hist(model, output_dir, n_clusters=100):
         logger.info(f"  Weight shape: {module.weight.shape}")
         logger.info(f"  Total weights: {len(weights):,}")
 
-        # Compute histogram
         counts, bin_edges = np.histogram(weights, bins=n_clusters)
         
-        # Cluster centers = middle of each bin
         cluster_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
         clusters = torch.from_numpy(cluster_centers).float()
         
-        # Assign each weight to the nearest bin
         assignments = np.digitize(weights, bin_edges) - 1
         assignments = np.clip(assignments, 0, n_clusters - 1)
         
-        # Density = histogram normalized
         densities = (counts / counts.sum()).astype(np.float32)
         densities = torch.from_numpy(densities)
-        
-        # Reshape assignments
+
         assignments = torch.from_numpy(assignments).long()
         assignments = assignments.reshape(module.weight.shape)
 
@@ -140,12 +133,10 @@ if __name__ == "__main__":
         logger.error("Please use --mode create to create per-layer clusters from scratch")
         exit(1)
     
-    # Load model
     logger.info("Loading model...")
     model = load_model_for_layer_info()
     logger.info("Model loaded successfully")
     
-    # Create per-layer clusters
     success = create_per_layer_clusters_hist(
         model,
         args.output_dir,
