@@ -28,9 +28,6 @@ bash mainldm/scripts/download_models.sh
 python ./mainldm/celeb_cali.py
 ```
 ```bash
-python ./mainldm/celeb_predadd.py
-```
-```bash
 python ./error_dec/celeb/celeb_dec.py --error cache
 ```
 ```bash
