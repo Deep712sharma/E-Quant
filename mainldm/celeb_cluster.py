@@ -1,9 +1,3 @@
-"""
-clustering.py - Fast histogram-based density clustering for neural network weights
-Optimized for integration with the main quantization script.
-Clusters are sorted by DENSITY (descending) and saved in format expected by main script.
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
@@ -35,9 +29,7 @@ def load_weights(filepath):
         
         print(f"Loaded data type: {type(weights_data)}")
         
-        # Helper function to safely convert tensor to numpy
         def tensor_to_numpy(tensor):
-            """Safely convert a tensor to numpy, handling gradients"""
             if isinstance(tensor, torch.Tensor):
                 if tensor.requires_grad:
                     return tensor.detach().cpu().numpy()
@@ -46,12 +38,10 @@ def load_weights(filepath):
             elif isinstance(tensor, np.ndarray):
                 return tensor
             else:
-                # Unknown type - print debug info
                 print(f"  Unknown type encountered: {type(tensor)}")
                 print(f"  Has detach: {hasattr(tensor, 'detach')}")
                 print(f"  Has numpy: {hasattr(tensor, 'numpy')}")
                 
-                # Try various approaches
                 if hasattr(tensor, 'detach'):
                     return tensor.detach().cpu().numpy()
                 elif hasattr(tensor, 'numpy'):
@@ -65,11 +55,9 @@ def load_weights(filepath):
                 else:
                     raise ValueError(f"Cannot convert {type(tensor)} to numpy")
 
-        # If checkpoint is a dictionary (common in PyTorch)
         if isinstance(weights_data, dict):
             print(f"Dictionary keys: {list(weights_data.keys())}")
             
-            # Try common keys
             if 'model_state_dict' in weights_data:
                 weights_data = weights_data['model_state_dict']
                 print("Using 'model_state_dict'")
@@ -77,7 +65,6 @@ def load_weights(filepath):
                 weights_data = weights_data['state_dict']
                 print("Using 'state_dict'")
 
-            # If still a dict, extract all tensors
             if isinstance(weights_data, dict):
                 tensors = []
                 for name, v in weights_data.items():
@@ -94,14 +81,10 @@ def load_weights(filepath):
                 else:
                     raise ValueError("No valid tensors found in checkpoint dictionary")
             else:
-                # After extracting state_dict, it became a single tensor
                 weights = tensor_to_numpy(weights_data)
 
         else:
-            # Single tensor/array case OR list/tuple of tensors
             print(f"Single item type: {type(weights_data)}")
-            
-            # Check if it's a list or tuple of tensors
             if isinstance(weights_data, (list, tuple)):
                 print(f"Found {len(weights_data)} items in list/tuple")
                 tensors = []
@@ -120,7 +103,6 @@ def load_weights(filepath):
                 else:
                     raise ValueError("No valid tensors found in list/tuple")
             else:
-                # Single tensor
                 weights = tensor_to_numpy(weights_data)
 
     else:
@@ -130,26 +112,13 @@ def load_weights(filepath):
 
 
 def calculate_cluster_density(cluster_weights, method='count_over_std'):
-    """
-    Calculate density metric for a cluster.
-    
-    Args:
-        cluster_weights: Array of weights in the cluster
-        method: Density calculation method
-            - 'count_over_std': size / std (higher = denser)
-            - 'negative_std': -std (higher = denser)
-            - 'count': Just the count (higher = larger)
-            - 'inverse_range': 1 / (max - min) (higher = denser)
-    
-    Returns:
-        Density value (higher = denser/more important)
-    """
+
     if len(cluster_weights) == 0:
         return 0.0
     
     if method == 'count_over_std':
         std = np.std(cluster_weights)
-        if std < 1e-10:  # Avoid division by zero
+        if std < 1e-10: 
             return len(cluster_weights) * 1e10
         return len(cluster_weights) / std
     
@@ -172,23 +141,7 @@ def calculate_cluster_density(cluster_weights, method='count_over_std'):
 def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05, 
                          min_peak_distance=5, peak_prominence_ratio=0.02,
                          cluster_radius=None, density_method='count_over_std'):
-    """
-    Perform histogram-based density clustering with clusters sorted by DENSITY.
-    Output format matches what the main quantization script expects.
-    
-    Args:
-        weights: 1D array of weight values
-        n_bins: Number of histogram bins
-        peak_height_ratio: Minimum peak height as fraction of max height
-        min_peak_distance: Minimum distance between peaks (in bins)
-        peak_prominence_ratio: Minimum peak prominence as fraction of max
-        cluster_radius: If provided, only weights within this radius are assigned
-                       to clusters. Others go to the last cluster (outliers).
-        density_method: How to calculate cluster density for sorting
-    
-    Returns:
-        Dictionary containing clustering results with clusters sorted by density
-    """
+
     print("=== Starting Histogram-Based Clustering ===")
     print(f"Density method: {density_method}\n")
     start_time = time.time()
@@ -199,8 +152,7 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
     
     print(f"Histogram created with {n_bins} bins")
     print(f"Weight range: [{weights.min():.6f}, {weights.max():.6f}]")
-    
-    # Find peaks
+ 
     peak_height_threshold = np.max(hist) * peak_height_ratio
     peak_prominence_threshold = np.max(hist) * peak_prominence_ratio
     
@@ -216,15 +168,11 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
     
     print(f"\nDetected {n_peaks} peaks")
     print(f"Peak locations: {peak_centers}")
-    
-    # Assign clusters (temporary labels based on peaks)
     if cluster_radius is not None:
         print(f"\nUsing cluster radius: ±{cluster_radius}")
         
-        # Initialize all as outliers (temporary last label)
         temp_clusters = np.full(len(weights), n_peaks, dtype=int)
         
-        # Assign to clusters if within radius
         for i, w in enumerate(weights):
             distances = np.abs(peak_centers - w)
             min_dist_idx = np.argmin(distances)
@@ -233,18 +181,15 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
                 temp_clusters[i] = min_dist_idx
         
         n_outliers = np.sum(temp_clusters == n_peaks)
-        n_temp_clusters = n_peaks + 1  # Include outlier cluster
+        n_temp_clusters = n_peaks + 1 
         
         print(f"Outliers: {n_outliers:,} ({n_outliers/len(weights)*100:.2f}%)")
     else:
-        # Assign to nearest peak
         temp_clusters = np.zeros(len(weights), dtype=int)
         for i, w in enumerate(weights):
             temp_clusters[i] = np.argmin(np.abs(peak_centers - w))
         
         n_temp_clusters = n_peaks
-    
-    # Calculate density for each cluster
     print("\n=== Calculating Cluster Densities ===")
     
     cluster_densities = []
@@ -252,11 +197,9 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
         mask = temp_clusters == label
         cluster_weights = weights[mask]
         
-        # Check if this is outlier cluster
         is_outlier = (cluster_radius is not None and label == n_peaks)
         
         if is_outlier:
-            # Outliers get lowest density (will be sorted last)
             density = -1e10
         else:
             density = calculate_cluster_density(cluster_weights, method=density_method)
@@ -266,20 +209,15 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
         density_str = "OUTLIERS" if is_outlier else f"{density:.2f}"
         print(f"Cluster {label}: density={density_str}, size={np.sum(mask):,}")
     
-    # Sort clusters by density (descending), but keep outliers at the end
     print("\n=== Sorting Clusters by Density (Highest to Lowest) ===")
     
-    # Separate regular clusters from outlier cluster
     regular_clusters = [(label, dens, size, False) for label, dens, size, is_out in cluster_densities if not is_out]
     outlier_clusters = [(label, dens, size, True) for label, dens, size, is_out in cluster_densities if is_out]
     
-    # Sort regular clusters by density (descending)
     regular_clusters.sort(key=lambda x: x[1], reverse=True)
     
-    # Combine: regular clusters first (sorted by density), outliers last
     sorted_clusters = regular_clusters + outlier_clusters
     
-    # Create mapping from old labels to new labels
     old_to_new = {}
     
     for new_label, (old_label, density, size, is_outlier) in enumerate(sorted_clusters):
@@ -290,19 +228,15 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
         else:
             print(f"Old cluster {old_label} -> New cluster {new_label} (density: {density:.2f}, size: {size:,})")
     
-    # Remap cluster labels
     clusters = np.array([old_to_new[label] for label in temp_clusters])
     
-    # Create ordered lists for main script
-    # Lists are in NEW cluster order (sorted by density)
     ordered_peak_centers = []
     ordered_densities = []
     
     for new_label, (old_label, density, size, is_outlier) in enumerate(sorted_clusters):
         if is_outlier:
-            # Outlier cluster has no peak center
-            ordered_peak_centers.append(0.0)  # Placeholder
-            ordered_densities.append(-1e10)  # Very low density
+            ordered_peak_centers.append(0.0) 
+            ordered_densities.append(-1e10) 
         else:
             ordered_peak_centers.append(float(peak_centers[old_label]))
             ordered_densities.append(float(density))
@@ -312,13 +246,11 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
     elapsed_time = time.time() - start_time
     print(f"\nClustering completed in {elapsed_time:.4f} seconds")
     
-    # Compute cluster statistics (in new sorted order)
     cluster_stats = []
     for new_label in range(n_clusters):
         mask = clusters == new_label
         cluster_weights = weights[mask]
         
-        # Find the original cluster this came from
         old_label, density, size, is_outlier = sorted_clusters[new_label]
         
         stats = {
@@ -341,7 +273,6 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
             print(f"\nCluster {new_label} (Outliers):")
         else:
             stats['peak_location'] = float(ordered_peak_centers[new_label])
-            # Find peak height from original peak
             peak_idx = np.argmin(np.abs(bin_centers - stats['peak_location']))
             stats['peak_height'] = int(hist[peak_idx])
             print(f"\nCluster {new_label} (Peak at {stats['peak_location']:.6f}):")
@@ -353,14 +284,13 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
         
         cluster_stats.append(stats)
     
-    # Package results
     results = {
         'weights': weights,
         'clusters': clusters,
         'n_clusters': n_clusters,
         'n_peaks': n_peaks,
-        'cluster_centers': ordered_peak_centers,  # List ordered by density
-        'densities': ordered_densities,  # List ordered by density (highest first)
+        'cluster_centers': ordered_peak_centers, 
+        'densities': ordered_densities, 
         'cluster_stats': cluster_stats,
         'histogram': hist,
         'bin_edges': bin_edges,
@@ -384,27 +314,15 @@ def histogram_clustering(weights, n_bins=200, peak_height_ratio=0.05,
 
 
 def save_results_for_main_script(results, output_dir='clustering_output', layer_name='layer'):
-    """
-    Save clustering results in the format expected by the main quantization script.
-    
-    Each layer's clusters are saved as: {layer_name}_clusters.pth
-    Format: {
-        'clusters': list of cluster centers (ordered by density),
-        'densities': list of density values (ordered by density, highest first),
-        'assignments': tensor of cluster assignments for each weight
-    }
-    """
+
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
-    
-    # Prepare data for main script
+
     cluster_data = {
-        'clusters': results['cluster_centers'],  # List of floats
-        'densities': results['densities'],  # List of floats
-        'assignments': torch.from_numpy(results['clusters']).long()  # Tensor of ints
+        'clusters': results['cluster_centers'],
+        'densities': results['densities'],
+        'assignments': torch.from_numpy(results['clusters']).long()
     }
-    
-    # Save in format expected by main script
     output_path = output_dir / f'{layer_name}_clusters.pth'
     torch.save(cluster_data, output_path)
     print(f"\nSaved clustering data for main script: {output_path}")
@@ -416,11 +334,9 @@ def save_results_for_main_script(results, output_dir='clustering_output', layer_
 
 
 def save_results(results, output_dir='clustering_output'):
-    """Save clustering results to disk (comprehensive version for analysis)."""
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
     
-    # Save numpy arrays
     np.savez(
         output_dir / 'clustering_data.npz',
         weights=results['weights'],
@@ -434,7 +350,6 @@ def save_results(results, output_dir='clustering_output'):
     )
     print(f"\nSaved clustering data to {output_dir / 'clustering_data.npz'}")
     
-    # Save metadata as JSON
     metadata = {
         'n_clusters': results['n_clusters'],
         'n_peaks': results['n_peaks'],
@@ -448,7 +363,6 @@ def save_results(results, output_dir='clustering_output'):
         json.dump(metadata, f, indent=2)
     print(f"Saved metadata to {output_dir / 'clustering_metadata.json'}")
     
-    # Save cluster assignments
     np.savetxt(
         output_dir / 'cluster_assignments.txt',
         results['clusters'],
@@ -458,7 +372,6 @@ def save_results(results, output_dir='clustering_output'):
     )
     print(f"Saved cluster assignments to {output_dir / 'cluster_assignments.txt'}")
     
-    # Save human-readable summary
     with open(output_dir / 'clustering_summary.txt', 'w') as f:
         f.write("=" * 70 + "\n")
         f.write("HISTOGRAM-BASED CLUSTERING SUMMARY\n")
@@ -519,7 +432,6 @@ def save_results(results, output_dir='clustering_output'):
 
 
 def visualize_results(results, output_dir='clustering_output'):
-    """Create visualizations of clustering results."""
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
     
@@ -536,18 +448,15 @@ def visualize_results(results, output_dir='clustering_output'):
     
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    # Plot 1: Histogram with detected peaks
     axes[0, 0].hist(weights, bins=n_bins, alpha=0.6, color='lightblue', edgecolor='black')
     axes[0, 0].plot(bin_centers, hist, 'b-', linewidth=2, label='Histogram')
     
-    # Plot peaks with labels showing their new cluster numbers and bit allocation
     quarter = n_clusters // 4
     for stats in cluster_stats:
         if not stats['is_outlier']:
             peak_loc = stats['peak_location']
             peak_idx = np.argmin(np.abs(bin_centers - peak_loc))
             
-            # Determine bit allocation
             label = stats['label']
             if label < quarter:
                 bits = 8
@@ -575,15 +484,12 @@ def visualize_results(results, output_dir='clustering_output'):
     axes[0, 0].set_title('Peak Detection & Bit Allocation\n(Sorted by density)')
     axes[0, 0].legend()
     axes[0, 0].grid(True, alpha=0.3)
-    
-    # Plot 2: Individual cluster distributions with bit allocation
     colors_bit = {8: 'darkgreen', 4: 'blue', 2: 'orange', 1: 'red'}
     
     for label in range(n_clusters):
         cluster_weights = weights[clusters == label]
         stats = cluster_stats[label]
         
-        # Determine bit allocation
         if label < quarter:
             bits = 8
         elif label < 2 * quarter:
@@ -606,11 +512,9 @@ def visualize_results(results, output_dir='clustering_output'):
     axes[0, 1].legend(fontsize=8, ncol=2)
     axes[0, 1].grid(True, alpha=0.3)
     
-    # Plot 3: Cluster assignment scatter with bit allocation coloring
     x = np.arange(len(weights))
     sample_step = max(1, len(weights) // 10000)
     
-    # Create color map based on bit allocation
     cluster_colors = np.zeros(len(clusters))
     for i in range(len(clusters)):
         label = clusters[i]
@@ -633,11 +537,9 @@ def visualize_results(results, output_dir='clustering_output'):
     cbar.set_ticks([1, 2, 4, 8])
     axes[1, 0].grid(True, alpha=0.3)
     
-    # Plot 4: Density comparison (bar chart)
     cluster_densities_plot = [stats['density'] for stats in cluster_stats]
     cluster_labels = [stats['label'] for stats in cluster_stats]
     
-    # Color bars by bit allocation
     bar_colors = []
     for label in cluster_labels:
         if cluster_stats[label]['is_outlier']:
@@ -659,7 +561,6 @@ def visualize_results(results, output_dir='clustering_output'):
     axes[1, 1].set_xticks(cluster_labels)
     axes[1, 1].grid(True, alpha=0.3, axis='y')
     
-    # Add bit allocation text on bars
     for i, (label, density) in enumerate(zip(cluster_labels, cluster_densities_plot)):
         if not cluster_stats[label]['is_outlier']:
             if label < quarter:
@@ -681,17 +582,7 @@ def visualize_results(results, output_dir='clustering_output'):
 
 
 def process_layer_weights(layer_weights_dict, output_dir='clustering_output', **clustering_params):
-    """
-    Process multiple layers and save each in the format expected by main script.
-    
-    Args:
-        layer_weights_dict: Dictionary mapping layer names to weight arrays
-        output_dir: Directory to save clustering results
-        **clustering_params: Parameters for histogram_clustering
-    
-    Returns:
-        Dictionary mapping layer names to clustering results
-    """
+
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
     
@@ -706,18 +597,14 @@ def process_layer_weights(layer_weights_dict, output_dir='clustering_output', **
         print(f"Processing layer: {layer_name}")
         print(f"{'='*80}")
         
-        # Ensure weights are flattened
         if isinstance(layer_weights, torch.Tensor):
             layer_weights = layer_weights.detach().cpu().numpy()
         layer_weights = layer_weights.flatten()
         
-        # Perform clustering
         results = histogram_clustering(layer_weights, **clustering_params)
         
-        # Save in format for main script
         save_results_for_main_script(results, output_dir, layer_name)
         
-        # Store results
         all_results[layer_name] = results
     
     print("\n" + "="*80)
@@ -730,21 +617,10 @@ def process_layer_weights(layer_weights_dict, output_dir='clustering_output', **
 
 
 def load_model_and_extract_weights(model_path, target_layers=None):
-    """
-    Load a PyTorch model checkpoint and extract weights from specified layers.
-    
-    Args:
-        model_path: Path to model checkpoint (.pt or .pth)
-        target_layers: List of layer name patterns to extract (e.g., ['conv', 'linear'])
-                      If None, extracts all layers
-    
-    Returns:
-        Dictionary mapping layer names to weight tensors
-    """
+
     print(f"Loading model from: {model_path}")
     checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
     
-    # Extract state dict
     if isinstance(checkpoint, dict):
         if 'state_dict' in checkpoint:
             state_dict = checkpoint['state_dict']
@@ -758,19 +634,15 @@ def load_model_and_extract_weights(model_path, target_layers=None):
     layer_weights = {}
     
     for name, param in state_dict.items():
-        # Skip non-weight parameters (biases, batch norm params, etc.)
         if 'weight' not in name:
             continue
         
-        # Filter by target layers if specified
         if target_layers is not None:
             if not any(pattern in name for pattern in target_layers):
                 continue
         
-        # Clean up layer name for filename compatibility
         clean_name = name.replace('.', '_').replace('/', '_')
         
-        # Convert to numpy and store
         if isinstance(param, torch.Tensor):
             layer_weights[clean_name] = param.detach().cpu().numpy()
         else:
@@ -783,69 +655,46 @@ def load_model_and_extract_weights(model_path, target_layers=None):
 
 
 def main():
-    """Main execution function."""
     
-    # ============================================
-    # CONFIGURATION - EDIT THIS SECTION
-    # ============================================
-    
-    # Choose processing mode:
-    # Mode 1: Single weight file (all weights concatenated)
-    # Mode 2: Model checkpoint with multiple layers
-    
-    MODE = 1  # Change to 2 for multi-layer processing
+    MODE = 1
     
     if MODE == 1:
-        # ========== MODE 1: Single weight file ==========
         print("\n" + "="*80)
         print("MODE 1: Processing single weight file")
         print("="*80 + "\n")
         
-        # Load weights from file
         weights = load_weights('./error_dec/celeb/weight_params.pth')
         
-        # Clustering parameters
         params = {
             'n_bins': 500,
             'peak_height_ratio': 0.05,
             'min_peak_distance': 5,
             'peak_prominence_ratio': 0.02,
-            'cluster_radius': 0.05,  # Set to None to disable
-            'density_method': 'count_over_std'  # Options: 'count_over_std', 'negative_std', 'count', 'inverse_range'
+            'cluster_radius': 0.05,
+            'density_method': 'count_over_std' 
         }
         
-        # Output directory
         output_dir = 'clustering_output'
         
-        # Perform clustering
         results = histogram_clustering(weights, **params)
         
-        # Save results in format for main script
-        layer_name = 'model_weights'  # Default name for single file
+        layer_name = 'model_weights'
         save_results_for_main_script(results, output_dir, layer_name)
         
-        # Save comprehensive results for analysis
         save_results(results, output_dir)
         
-        # Create visualizations
         visualize_results(results, output_dir)
     
     elif MODE == 2:
-        # ========== MODE 2: Multi-layer model ==========
         print("\n" + "="*80)
         print("MODE 2: Processing multiple layers from model checkpoint")
         print("="*80 + "\n")
         
-        # Load model and extract layer weights
         model_path = './mainldm/models/ldm/celeba256/model.ckpt'
         
-        # Optional: Filter specific layers (None = all layers)
-        # Examples: ['conv', 'linear', 'attention'], ['model.diffusion_model']
-        target_layers = None  # or ['conv', 'linear'] to filter
-        
+        target_layers = None 
         layer_weights_dict = load_model_and_extract_weights(model_path, target_layers)
         
-        # Clustering parameters (same for all layers)
         params = {
             'n_bins': 500,
             'peak_height_ratio': 0.05,
@@ -855,13 +704,10 @@ def main():
             'density_method': 'count_over_std'
         }
         
-        # Output directory
         output_dir = 'clustering_output'
         
-        # Process all layers
         all_results = process_layer_weights(layer_weights_dict, output_dir, **params)
         
-        # Optionally visualize first layer as example
         if all_results:
             first_layer = list(all_results.keys())[0]
             print(f"\nCreating visualization for example layer: {first_layer}")
@@ -869,10 +715,7 @@ def main():
     
     else:
         raise ValueError(f"Invalid MODE: {MODE}. Choose 1 or 2.")
-    
-    # ============================================
-    # COMPLETION MESSAGE
-    # ============================================
+
     
     print("\n" + "=" * 80)
     print("CLUSTERING COMPLETE!")
