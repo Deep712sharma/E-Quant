@@ -34,9 +34,6 @@ python ./error_dec/celeb/celeb_dec.py --error cache
 python ./mainldm/celeb_params.py
 ```
 ```bash
-python ./error_dec/celeb/celeb_dec.py --error quant
-```
-```bash
 python ./mainldm/celeb_cluster.py
 ```
 ```bash
