@@ -44,7 +44,6 @@ def custom_to_pil(x):
 
 
 def custom_to_np(x):
-    # saves the batch in adm style as in https://github.com/openai/guided-diffusion/blob/main/scripts/image_sample.py
     sample = x.detach().cpu()
     sample = ((sample + 1) * 127.5).clamp(0, 255).to(torch.uint8)
     sample = sample.permute(0, 2, 3, 1)
@@ -106,7 +105,6 @@ def make_convolutional_sample(model, batch_size, vanilla=False, custom_steps=Non
             model.model.diffusion_model.model.image_size,
             model.model.diffusion_model.model.image_size]
 
-    # with model.ema_scope("Plotting"):
     with torch.no_grad():
         t0 = time.time()
         if vanilla:
@@ -125,7 +123,6 @@ def make_convolutional_sample(model, batch_size, vanilla=False, custom_steps=Non
     log["sample"] = x_sample
     log["time"] = t1 - t0
     log['throughput'] = sample.shape[0] / (t1 - t0)
-    # logger.info(f'Throughput for this batch: {log["throughput"]}')
     return log
 
 
@@ -191,7 +188,6 @@ def block_train_w(q_unet, args, kwargs, cali_data, t, cali_t, cache):
     recon_qnn = recon_Qmodel(args, q_unet, kwargs)
 
     q_unet.block_count = 0
-    '''weight'''
     kwargs['cali_data'] = (cali_data, t, cache)
     kwargs['cali_t'] = cali_t
     kwargs['cond'] = False
@@ -238,7 +234,6 @@ if __name__ == "__main__":
         args.mode = "uni"
 
     seed_everything(args.seed)
-    # torch.set_grad_enabled(False)
     device = torch.device("cuda", args.local_rank)
 
     logging.basicConfig(
@@ -290,7 +285,7 @@ if __name__ == "__main__":
         set_weight_quantize_params(q_unet, cali_data=(cali_data, t))
         set_act_quantize_params(args.interval_seq, q_unet, all_cali_data, all_t, all_cache)
         
-        torch.save((q_unet.model.output_blocks[-1][0].skip_connection.weight_quantizer.delta, q_unet.model.output_blocks[-1][0].skip_connection.weight_quantizer.zero_point), "./error_dec/celeb/weight_quantizer_params_aftercacheadd.pth") #_aftercacheadd
+        torch.save((q_unet.model.output_blocks[-1][0].skip_connection.weight_quantizer.delta, q_unet.model.output_blocks[-1][0].skip_connection.weight_quantizer.zero_point), "./error_dec/celeb/weight_quantizer_params_aftercacheadd.pth") 
         torch.save((q_unet.model.output_blocks[-1][0].skip_connection.act_quantizer.delta, q_unet.model.output_blocks[-1][0].skip_connection.act_quantizer.zero_point), "./error_dec/celeb/act_quantizer_params_aftercacheadd.pth")
         torch.save((q_unet.model.output_blocks[-1][0].skip_connection.org_weight, q_unet.model.output_blocks[-1][0].skip_connection.org_bias), "./error_dec/celeb/weight_params.pth")
         torch.save((q_unet.model.output_blocks[-1][0].in_layers[2].weight_quantizer.delta, q_unet.model.output_blocks[-1][0].in_layers[2].weight_quantizer.zero_point), "./error_dec/celeb/weight_quantizer_norm_params_aftercacheadd.pth")
