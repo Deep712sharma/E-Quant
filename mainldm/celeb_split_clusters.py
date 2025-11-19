@@ -1,8 +1,3 @@
-"""
-Script to split a single cluster file containing all weights 
-into per-layer cluster files that can be used by the entropy model
-"""
-
 import torch
 import os
 import argparse
@@ -32,15 +27,6 @@ def load_model_for_layer_info():
 
 
 def split_single_cluster_file(cluster_file_path, output_dir, model):
-    """
-    Split a single cluster file into per-layer files
-    
-    Args:
-        cluster_file_path: Path to single cluster file (e.g., model_weights_clusters.pth)
-        output_dir: Directory to save per-layer cluster files
-        model: Model to get layer information from
-    """
-    
     logger.info(f"Loading cluster file: {cluster_file_path}")
     cluster_data = torch.load(cluster_file_path)
     
@@ -51,9 +37,7 @@ def split_single_cluster_file(cluster_file_path, output_dir, model):
         logger.info("Detected single combined cluster file")
         logger.info(f"Total clusters: {len(cluster_data['clusters'])}")
         logger.info(f"Total assignments: {cluster_data['assignments'].numel()}")
-        
-        # This approach won't work well because we need to know which 
-        # assignments belong to which layer
+
         logger.error("Cannot split a single combined cluster file without layer mapping!")
         logger.error("You need to cluster each layer separately.")
         logger.error("\nPlease use a clustering script that creates per-layer cluster files.")
@@ -62,107 +46,78 @@ def split_single_cluster_file(cluster_file_path, output_dir, model):
     return False
 
 
-def create_per_layer_clusters(model, output_dir, n_clusters=100, sample_ratio=0.1):
-    """
-    Create cluster files for each layer from scratch
-    
-    Args:
-        model: Model to cluster
-        output_dir: Output directory
-        n_clusters: Number of clusters per layer
-        sample_ratio: Ratio of weights to sample for clustering
-    """
-    from sklearn.cluster import MiniBatchKMeans
+def create_per_layer_clusters_hist(model, output_dir, n_clusters=100):
+
     import numpy as np
+    import torch
+    import os
     
     os.makedirs(output_dir, exist_ok=True)
     
-    logger.info("Creating per-layer cluster files...")
-    logger.info(f"Using {n_clusters} clusters per layer")
+    logger.info("Creating per-layer histogram-based cluster files...")
+    logger.info(f"Using {n_clusters} histogram bins per layer")
     
-    # Get diffusion model
     diff_model = model.model.diffusion_model
-    
     layer_count = 0
     
     for name, module in diff_model.named_modules():
-        # Only cluster conv and linear layers
+        
         if not (isinstance(module, torch.nn.Conv2d) or isinstance(module, torch.nn.Linear)):
             continue
-        
-        if not hasattr(module, 'weight'):
+        if not hasattr(module, "weight"):
             continue
         
         weights = module.weight.data.cpu().numpy().flatten()
         
-        if len(weights) < n_clusters * 10:
-            logger.warning(f"Skipping {name}: too few weights ({len(weights)})")
+        if len(weights) < n_clusters:
+            logger.warning(f"Skipping {name}: not enough weights ({len(weights)})")
             continue
         
-        logger.info(f"\nClustering layer: {name}")
+        logger.info(f"\nHistogram clustering layer: {name}")
         logger.info(f"  Weight shape: {module.weight.shape}")
         logger.info(f"  Total weights: {len(weights):,}")
+
+        # Compute histogram
+        counts, bin_edges = np.histogram(weights, bins=n_clusters)
         
-        # Sample weights for clustering
-        n_samples = min(len(weights), int(len(weights) * sample_ratio))
-        n_samples = max(n_samples, n_clusters * 10)  # At least 10x clusters
+        # Cluster centers = middle of each bin
+        cluster_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+        clusters = torch.from_numpy(cluster_centers).float()
         
-        indices = np.random.choice(len(weights), n_samples, replace=False)
-        sampled_weights = weights[indices].reshape(-1, 1)
+        # Assign each weight to the nearest bin
+        assignments = np.digitize(weights, bin_edges) - 1
+        assignments = np.clip(assignments, 0, n_clusters - 1)
         
-        logger.info(f"  Sampling {n_samples:,} weights for clustering")
+        # Density = histogram normalized
+        densities = (counts / counts.sum()).astype(np.float32)
+        densities = torch.from_numpy(densities)
         
-        # Perform clustering
-        kmeans = MiniBatchKMeans(
-            n_clusters=n_clusters,
-            random_state=42,
-            batch_size=1024,
-            max_iter=100
-        )
-        
-        kmeans.fit(sampled_weights)
-        
-        # Get cluster centers
-        clusters = torch.from_numpy(kmeans.cluster_centers_.flatten()).float()
-        
-        # Assign all weights to clusters
-        all_weights = weights.reshape(-1, 1)
-        assignments = kmeans.predict(all_weights)
+        # Reshape assignments
         assignments = torch.from_numpy(assignments).long()
-        
-        # Calculate densities (proportion of weights in each cluster)
-        unique, counts = np.unique(assignments.numpy(), return_counts=True)
-        densities = np.zeros(n_clusters)
-        for cluster_id, count in zip(unique, counts):
-            densities[cluster_id] = count / len(assignments)
-        densities = torch.from_numpy(densities).float()
-        
-        # Reshape assignments to match weight shape
         assignments = assignments.reshape(module.weight.shape)
-        
-        # Save cluster file
+
         cluster_info = {
-            'clusters': clusters,
-            'assignments': assignments,
-            'densities': densities,
-            'layer_shape': module.weight.shape,
-            'num_weights': len(weights)
+            "clusters": clusters,
+            "assignments": assignments,
+            "densities": densities,
+            "layer_shape": module.weight.shape,
+            "num_weights": len(weights),
         }
         
-        # Use model. prefix for naming consistency
         layer_name = f"model.{name}"
         output_file = os.path.join(output_dir, f"{layer_name}_clusters.pth")
         torch.save(cluster_info, output_file)
         
         logger.info(f"  ✓ Saved: {output_file}")
-        logger.info(f"  Clusters: {n_clusters}, Density range: [{densities.min():.4f}, {densities.max():.4f}]")
+        logger.info(f"  Density range: [{densities.min():.4f}, {densities.max():.4f}]")
+        logger.info(f"  Cluster center range: [{clusters.min():.4f}, {clusters.max():.4f}]")
         
         layer_count += 1
     
-    logger.info(f"\n{'='*80}")
-    logger.info(f"Successfully created cluster files for {layer_count} layers")
+    logger.info(f"\n{'=' * 80}")
+    logger.info(f"Successfully created histogram cluster files for {layer_count} layers")
     logger.info(f"Output directory: {output_dir}")
-    logger.info(f"{'='*80}")
+    logger.info(f"{'=' * 80}")
     
     return True
 
@@ -177,8 +132,6 @@ if __name__ == "__main__":
                        help="split: Split existing file (not supported), create: Create from scratch")
     parser.add_argument("--n_clusters", type=int, default=100,
                        help="Number of clusters per layer")
-    parser.add_argument("--sample_ratio", type=float, default=0.1,
-                       help="Ratio of weights to sample for clustering")
     
     args = parser.parse_args()
     
@@ -193,11 +146,10 @@ if __name__ == "__main__":
     logger.info("Model loaded successfully")
     
     # Create per-layer clusters
-    success = create_per_layer_clusters(
+    success = create_per_layer_clusters_hist(
         model,
         args.output_dir,
         n_clusters=args.n_clusters,
-        sample_ratio=args.sample_ratio
     )
     
     if success:
