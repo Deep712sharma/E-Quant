@@ -40,10 +40,10 @@ python ./error_dec/celeb/celeb_dec.py --error quant
 python ./mainldm/celeb_cluster.py
 ```
 ```bash
-python ./mainldm/celeb_clustering_per_layer.py
+python ./mainldm/celeb_split_clusters.py
 ```
 ```bash
-python ./mainldm/celeb_split_clusters.py
+python ./mainldm/celeb_clustering_per_layer.py
 ```
 ```bash
 python ./mainldm/celeb_quant.py --train_entropy --use_cluster_quant --use_entropy_model --entropy_iters 1000 --clustering_dir ./clustering_per_layer
