@@ -14,7 +14,6 @@ import numpy as np
 import torch.distributed as dist
 
 import torch
-# torch.set_grad_enabled(False)
 from omegaconf import OmegaConf
 from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler, DDIMSampler_trainer
@@ -34,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 def extract_features(args):
         seed_everything(args.seed)
-        # torch.set_grad_enabled(False)
         device = torch.device("cuda", args.local_rank)
 
         logging.basicConfig(
@@ -73,7 +71,6 @@ def extract_features(args):
             _, intermediates = sampler.sample(args.ddim_steps, batch_size=bs, shape=shape, eta=args.ddim_eta, verbose=False,)
 
         feature_maps = hooks[0].out
-    #torch.save(feature_maps, "./calibration/feature_maps.pt")
         return feature_maps
         
 def load_model_from_config(config, ckpt):
@@ -91,31 +88,3 @@ def get_model():
     config = OmegaConf.load("./mainldm/models/ldm/celeba256/config.yaml")  
     model = load_model_from_config(config, "./mainldm/models/ldm/celeba256/model.ckpt")
     return model
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--calib_num_samples', type=int, default=512)
-    parser.add_argument('--calib_batch', type=int, default=32)
-    parser.add_argument("--local_rank", type=int, default=1)
-    parser.add_argument('--ddim_steps', default=100, type=int)
-    parser.add_argument("--ddim_eta", type=float, default=0.0)
-    parser.add_argument('--seed', default=1234+9, type=int)
-    parser.add_argument("--dps_steps", action='store_true', default=False)
-
-    parser.add_argument("--replicate_interval", type=int, default=2)
-    parser.add_argument("--nonuniform", action='store_true')
-    parser.add_argument("--pow", type=float, default=1.5)
-    args = parser.parse_args()
-    
-    if args.dps_steps:
-        args.mode = "dps_opt"
-    else:
-        args.mode = "uni"
-
-    print(args)
-    
-
-    feature_maps = extract_features(args)
-
-    logging.info("sample predadd finish!")
