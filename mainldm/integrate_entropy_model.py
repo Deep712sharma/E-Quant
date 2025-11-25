@@ -1,7 +1,3 @@
-"""
-Integration module for entropy model with cluster-based quantization
-"""
-
 import torch
 import torch.nn as nn
 from typing import Dict, List, Tuple, Optional
@@ -12,9 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 class ClusterBasedQuantizer:
-    """
-    Cluster-based quantizer with learned entropy model for optimal bit allocation
-    """
     def __init__(self, 
                  clusters,
                  densities,
@@ -25,21 +18,14 @@ class ClusterBasedQuantizer:
         self.assignments = assignments
         self.num_clusters = num_clusters
         
-        # Initialize bit allocation based on density
         self.bit_allocation = self._initialize_bit_allocation()
         
-        # Entropy model (will be created later)
         self.entropy_model = None
         self.is_trained = False
         
     def _initialize_bit_allocation(self) -> torch.Tensor:
-        """
-        Initialize bit allocation for each cluster based on density
-        Higher density clusters get more bits
-        """
         bit_allocation = torch.zeros(self.num_clusters)
         
-        # Sort densities to determine quartiles
         sorted_densities = sorted(enumerate(self.densities), 
                                  key=lambda x: x[1], reverse=True)
         
@@ -47,26 +33,17 @@ class ClusterBasedQuantizer:
         
         for i, (cluster_id, density) in enumerate(sorted_densities):
             if i < quarter:
-                bit_allocation[cluster_id] = 8  # Top 25%
+                bit_allocation[cluster_id] = 8 
             elif i < 2 * quarter:
-                bit_allocation[cluster_id] = 4  # Next 25%
+                bit_allocation[cluster_id] = 4 
             elif i < 3 * quarter:
-                bit_allocation[cluster_id] = 2  # Next 25%
+                bit_allocation[cluster_id] = 2 
             else:
-                bit_allocation[cluster_id] = 1  # Last 25%
+                bit_allocation[cluster_id] = 1 
         
         return bit_allocation.cuda()
     
     def quantize_weights(self, weights: torch.Tensor) -> torch.Tensor:
-        """
-        Quantize weights using cluster-based mixed precision
-        
-        Args:
-            weights: Original weights
-            
-        Returns:
-            quantized_weights: Quantized weights
-        """
         weights_flat = weights.flatten()
         assignments_flat = self.assignments.flatten()
         quantized_flat = torch.zeros_like(weights_flat)
@@ -78,11 +55,9 @@ class ClusterBasedQuantizer:
             if cluster_weights.numel() == 0:
                 continue
             
-            # Get bit allocation for this cluster
             n_bits = int(self.bit_allocation[cluster_id].item())
             n_levels = 2 ** n_bits
             
-            # Uniform quantization
             w_min = cluster_weights.min()
             w_max = cluster_weights.max()
             
@@ -98,28 +73,13 @@ class ClusterBasedQuantizer:
     def train_entropy_model(self, 
                            original_weights: torch.Tensor,
                            num_iterations: int = 500) -> Dict:
-        """
-        Train entropy model for this layer
-        
-        Args:
-            original_weights: Original FP32 weights
-            num_iterations: Training iterations
-            
-        Returns:
-            metrics: Training metrics
-        """
-        
-        
-        # Create entropy model
         self.entropy_model = ClusterEntropyModel(
             num_clusters=self.num_clusters,
             max_levels=256
         ).cuda()
         
-        # Quantize weights
         quantized_weights = self.quantize_weights(original_weights)
         
-        # Train entropy model
         trainer = EntropyModelTrainer(self.entropy_model, lr=1e-3)
         metrics = trainer.train(
             quantized_weights,
@@ -132,11 +92,7 @@ class ClusterBasedQuantizer:
         return metrics
     
     def calculate_bitrate(self, quantized_weights: torch.Tensor) -> float:
-        """
-        Calculate actual bitrate using entropy model
-        """
         if not self.is_trained or self.entropy_model is None:
-            # Fallback to theoretical bitrate
             return self._calculate_theoretical_bitrate()
         
         from entropy_model import calculate_actual_bitrate
@@ -149,9 +105,6 @@ class ClusterBasedQuantizer:
         )
     
     def _calculate_theoretical_bitrate(self) -> float:
-        """
-        Calculate theoretical bitrate from bit allocation
-        """
         assignments_flat = self.assignments.flatten()
         total_bits = 0
         total_weights = assignments_flat.numel()
@@ -165,26 +118,14 @@ class ClusterBasedQuantizer:
         return total_bits / total_weights if total_weights > 0 else 0
     
     def get_average_bitwidth(self) -> float:
-        """Calculate average bit-width"""
         return self._calculate_theoretical_bitrate()
 
 
 def calculate_average_bitwidth(model, cluster_quantizers: Dict) -> float:
-    """
-    Calculate average bitwidth across all quantized layers
-    
-    Args:
-        model: Quantized model
-        cluster_quantizers: Dictionary of quantizers per layer
-        
-    Returns:
-        avg_bitwidth: Average bitwidth
-    """
     total_weights = 0
     total_bits = 0
     
     for name, quantizer in cluster_quantizers.items():
-        # Find corresponding module
         module = None
         for n, m in model.named_modules():
             if n == name and hasattr(m, 'org_weight'):
@@ -206,34 +147,20 @@ def calculate_average_bitwidth(model, cluster_quantizers: Dict) -> float:
 
 
 def find_matching_layer(layer_name: str, layer_clusters: Dict) -> Optional[str]:
-    """
-    Find matching cluster layer name for a model layer
-    Handles different naming conventions
-    
-    Args:
-        layer_name: Name from model
-        layer_clusters: Dictionary of cluster data
-        
-    Returns:
-        Matching cluster key or None
-    """
-    # Exact match
     if layer_name in layer_clusters:
         return layer_name
     
-    # Try different naming patterns
     patterns = [
-        layer_name.replace('model.', ''),  # Remove 'model.' prefix
-        layer_name.replace('org_module.', ''),  # Remove 'org_module.' prefix
-        'model.' + layer_name,  # Add 'model.' prefix
-        layer_name.split('.')[-1],  # Just the last component
+        layer_name.replace('model.', ''),
+        layer_name.replace('org_module.', ''),
+        'model.' + layer_name, 
+        layer_name.split('.')[-1],
     ]
     
     for pattern in patterns:
         if pattern in layer_clusters:
             return pattern
     
-    # Partial match - check if layer_name is contained in any cluster key
     for cluster_key in layer_clusters.keys():
         if layer_name in cluster_key or cluster_key in layer_name:
             return cluster_key
@@ -246,20 +173,6 @@ def apply_entropy_aware_quantization(q_unet,
                                      args,
                                      train_entropy: bool = True,
                                      num_entropy_iters: int = 500) -> Tuple:
-    """
-    Apply cluster quantization with learned entropy models
-    
-    Args:
-        q_unet: Quantized model
-        cluster_data: Cluster information from clustering
-        args: Arguments
-        train_entropy: Whether to train entropy models
-        num_entropy_iters: Iterations for entropy model training
-        
-    Returns:
-        cluster_quantizers: Dictionary of quantizers per layer
-        bitrate_info: Bitrate information per layer
-    """
     logger.info("\n" + "="*80)
     logger.info("APPLYING ENTROPY-AWARE CLUSTER QUANTIZATION")
     logger.info("="*80)
@@ -270,18 +183,16 @@ def apply_entropy_aware_quantization(q_unet,
     
     total_weights = 0
     total_bits = 0
-    
-    # Debug: print all module names to find matching pattern
     logger.info("\nSearching for quantizable layers...")
     all_module_names = [name for name, module in q_unet.named_modules() if hasattr(module, 'org_weight')]
     logger.info(f"Found {len(all_module_names)} modules with org_weight:")
-    for name in all_module_names[:5]:  # Show first 5
+    for name in all_module_names[:5]:
         logger.info(f"  - {name}")
     if len(all_module_names) > 5:
         logger.info(f"  ... and {len(all_module_names) - 5} more")
     
     logger.info(f"\nCluster files loaded for {len(layer_clusters)} layers:")
-    for name in list(layer_clusters.keys())[:5]:  # Show first 5
+    for name in list(layer_clusters.keys())[:5]: 
         logger.info(f"  - {name}")
     if len(layer_clusters) > 5:
         logger.info(f"  ... and {len(layer_clusters) - 5} more")
@@ -290,7 +201,6 @@ def apply_entropy_aware_quantization(q_unet,
         if not hasattr(module, 'org_weight'):
             continue
         
-        # Try to find matching cluster data
         cluster_key = find_matching_layer(name, layer_clusters)
         
         if cluster_key is None:
@@ -302,16 +212,13 @@ def apply_entropy_aware_quantization(q_unet,
         
         org_weight = module.org_weight.cuda()
         cluster_info = layer_clusters[cluster_key]
-        
-        # Create cluster-based quantizer
+
         quantizer = ClusterBasedQuantizer(
             clusters=cluster_info['clusters'],
             densities=cluster_info['densities'],
             assignments=cluster_info['assignments'],
             num_clusters=len(cluster_info['clusters'])
         )
-        
-        # Train entropy model if requested
         if train_entropy:
             logger.info(f"  Training entropy model...")
             metrics = quantizer.train_entropy_model(
@@ -320,20 +227,15 @@ def apply_entropy_aware_quantization(q_unet,
             )
             logger.info(f"  ✓ Entropy model trained: {metrics['bits_per_weight']:.3f} bits/weight")
         
-        # Apply quantization
         quantized_weight = quantizer.quantize_weights(org_weight)
         
-        # Calculate actual bitrate
         bitrate = quantizer.calculate_bitrate(quantized_weight)
         
-        # Store quantizer
         cluster_quantizers[name] = quantizer
         
-        # Update module to use entropy-aware quantization
         module.cluster_quantizer = quantizer
         module.use_entropy_quant = True
         
-        # Store bitrate information
         num_weights = org_weight.numel()
         bitrate_info[name] = {
             'bitrate': bitrate,
@@ -349,7 +251,6 @@ def apply_entropy_aware_quantization(q_unet,
         logger.info(f"    Weights: {num_weights:,}")
         logger.info(f"    Total bits: {bitrate * num_weights:,.0f}")
     
-    # Calculate overall statistics
     if total_weights > 0:
         avg_bitrate = total_bits / total_weights
         compression_ratio = 32.0 / avg_bitrate
@@ -374,38 +275,25 @@ def apply_entropy_aware_quantization(q_unet,
 
 
 def modify_forward_for_entropy_quant(module, quantizer):
-    """
-    Modify module's forward pass to use entropy-aware quantization
-    
-    Args:
-        module: Layer module
-        quantizer: ClusterBasedQuantizer with trained entropy model
-    """
     original_forward = module.forward
     
     def entropy_forward(x, *args, **kwargs):
         if hasattr(module, 'use_entropy_quant') and module.use_entropy_quant:
-            # Get original weights
             org_weight = module.org_weight
             if not org_weight.is_cuda:
                 org_weight = org_weight.cuda()
             
-            # Quantize using entropy-aware quantizer
             q_weight = quantizer.quantize_weights(org_weight)
             
-            # Apply quantized weights
             if hasattr(module, 'org_module'):
                 orig_w = module.org_module.weight.data
                 module.org_module.weight.data = q_weight
                 
-                # Apply activation quantization if enabled
                 if hasattr(module, 'act_quantizer') and module.act_quantizer is not None:
                     x = module.act_quantizer(x)
                 
-                # Forward pass
                 out = module.org_module(x, *args, **kwargs)
                 
-                # Restore original weights
                 module.org_module.weight.data = orig_w
                 return out
         
@@ -415,13 +303,6 @@ def modify_forward_for_entropy_quant(module, quantizer):
 
 
 def save_entropy_models(cluster_quantizers: Dict, save_path: str):
-    """
-    Save trained entropy models
-    
-    Args:
-        cluster_quantizers: Dictionary of quantizers
-        save_path: Path to save
-    """
     logger.info(f"Saving entropy models to {save_path}")
     
     entropy_states = {}
@@ -438,13 +319,6 @@ def save_entropy_models(cluster_quantizers: Dict, save_path: str):
 
 
 def load_entropy_models(cluster_quantizers: Dict, load_path: str):
-    """
-    Load pre-trained entropy models
-    
-    Args:
-        cluster_quantizers: Dictionary of quantizers
-        load_path: Path to load from
-    """
     from entropy_model import ClusterEntropyModel
     
     logger.info(f"Loading entropy models from {load_path}")
@@ -455,7 +329,6 @@ def load_entropy_models(cluster_quantizers: Dict, load_path: str):
         if name in entropy_states:
             state = entropy_states[name]
             
-            # Create and load entropy model
             quantizer.entropy_model = ClusterEntropyModel(
                 num_clusters=state['num_clusters'],
                 max_levels=256
@@ -463,7 +336,6 @@ def load_entropy_models(cluster_quantizers: Dict, load_path: str):
             quantizer.entropy_model.load_state_dict(state['entropy_model'])
             quantizer.entropy_model.eval()
             
-            # Load bit allocation
             quantizer.bit_allocation = state['bit_allocation'].cuda()
             quantizer.is_trained = True
             
