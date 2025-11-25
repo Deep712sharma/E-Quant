@@ -6,7 +6,6 @@ dependencies:
   - python=3.8.5
   - pip=20.3
   - cudatoolkit=11.0
-  - pytorch=1.7.0
   - torchvision=0.8.1
   - numpy=1.19.2
   - pip:
@@ -19,7 +18,7 @@ dependencies:
     - imageio==2.9.0
     - imageio-ffmpeg==0.4.2
     - pytorch-lightning==1.4.2
-    - lightning-utilities==0.4.2
+    - lightning-fabric
     - omegaconf==2.1.1
     - test-tube>=0.7.5
     - streamlit>=0.73.1
