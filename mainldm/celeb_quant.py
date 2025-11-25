@@ -426,6 +426,9 @@ if __name__ == "__main__":
             avg_bitwidth, avg_quant_value, analysis_results = average(q_unet, args, bitrate_info)
         else:
             avg_bitwidth, avg_quant_value, analysis_results = average(q_unet, args)
+        
+        logger.info(f"✅ Final average bitwidth: {avg_bitwidth:.3f} bits")
+        logger.info(f"✅ Average quantized weight value: {avg_quant_value:.6f}")
 
     logger.info("\n Preparing model for sampling...")
     model.interval_seq = args.interval_seq
