@@ -4,7 +4,7 @@ import sys
 import argparse
 import logging
 from pathlib import Path
-from split_clusters import create_per_layer_clusters_hist, load_model_for_layer_info
+from celeb_split_clusters import create_per_layer_clusters_hist, load_model_for_layer_info
 
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
