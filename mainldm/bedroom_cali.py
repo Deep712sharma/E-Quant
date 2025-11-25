@@ -1,6 +1,3 @@
-'''
-First, remember to uncomment line 987-988 in ./mainldm/ldm/models/diffusion/ddpm.py and comment them after finish collecting.
-''' 
 import sys
 sys.path.append("./mainldm")
 sys.path.append("./mainddpm")
@@ -17,7 +14,6 @@ import numpy as np
 import torch.distributed as dist
 
 import torch
-# torch.set_grad_enabled(False)
 from omegaconf import OmegaConf
 from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler, DDIMSampler_trainer
@@ -159,7 +155,6 @@ def get_interval_seq(model, args, device):
         groups_num = int(groups_num)
 
         fisher = Fisher(samples=feature_maps, class_num=groups_num)
-        # interval_seq = fisher.feature_to_interval_seq()
         interval_seq = fisher.feature_to_interval_seq_optimal(args.replicate_interval)
         logging.info(interval_seq)
         for hook in hooks:
@@ -191,7 +186,6 @@ if __name__ == "__main__":
         args.mode = "uni"
 
     seed_everything(args.seed)
-    # torch.set_grad_enabled(False)
     device = torch.device("cuda", args.local_rank)
 
     logging.basicConfig(
@@ -210,6 +204,8 @@ if __name__ == "__main__":
     interval_seq = get_interval_seq(model=model, args=args, device=device)
     args.interval_seq = interval_seq
     all_cali_data, all_t, all_cali_t, all_cache = get_calibration(model=model, args=args, device=device)
+
+    os.makedirs("./calibration", exist_ok=True)
     
     torch.save((interval_seq, all_cali_data, all_t, all_cali_t, all_cache), \
                 "./calibration/bedroom{}_cache{}_{}.pth".format(args.ddim_steps, args.replicate_interval, args.mode))
