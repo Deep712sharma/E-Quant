@@ -38,7 +38,7 @@ from quant.set_quantize_params import set_act_quantize_params, set_weight_quanti
 from quant.recon_Qmodel import recon_Qmodel, skip_LDM_Model
 from quant.quant_layer import QuantModule
 logger = logging.getLogger(__name__)
-from avg_entropy import average
+from average import average
 
 
 def custom_to_pil(x):

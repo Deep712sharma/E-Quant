@@ -36,6 +36,7 @@ from quant.quant_block import Change_LDM_model_attnblock
 from quant.set_quantize_params import set_act_quantize_params, set_weight_quantize_params
 from quant.recon_Qmodel import recon_Qmodel, skip_LDM_Model
 from quant.quant_layer import QuantModule
+from average import average
 logger = logging.getLogger(__name__)
 
 
@@ -419,6 +420,12 @@ if __name__ == "__main__":
         logger.info("\n🔧 Enabling quantization state...")
         q_unet.set_quant_state(weight_quant=False, act_quant=True)
         setattr(model.model, 'diffusion_model', q_unet)
+
+        logger.info("\nCalculating final statistics...")
+        if args.use_cluster_quant and args.use_entropy_model and bitrate_info is not None:
+            avg_bitwidth, avg_quant_value, analysis_results = average(q_unet, args, bitrate_info)
+        else:
+            avg_bitwidth, avg_quant_value, analysis_results = average(q_unet, args)
 
     logger.info("\n Preparing model for sampling...")
     model.interval_seq = args.interval_seq
