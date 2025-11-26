@@ -34,12 +34,6 @@ python ./error_dec/celeb/celeb_dec.py --error cache
 python ./mainldm/celeb_params.py
 ```
 ```bash
-python ./mainldm/celeb_cluster.py
-```
-```bash
-python ./mainldm/celeb_split_clusters.py
-```
-```bash
 python ./mainldm/celeb_clustering_per_layer.py
 ```
 ```bash
