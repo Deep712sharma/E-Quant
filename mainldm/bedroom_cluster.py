@@ -782,7 +782,7 @@ def load_model_and_extract_weights(model_path, target_layers=None):
     return layer_weights
 
 
-def main():
+def cluster_main():
     """Main execution function."""
     
     # ============================================
@@ -894,7 +894,3 @@ def main():
     print("  - Next 25%:                            2-bit quantization")
     print("  - Last 25% (lowest density):           1-bit quantization")
     print("="*80)
-
-
-if __name__ == "__main__":
-    main()
