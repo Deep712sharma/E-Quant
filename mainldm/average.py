@@ -279,7 +279,7 @@ def average(q_unet, args, bitrate_info=None):
     print("=" * 80)
 
     # Save summary
-    output_file = "quantization_analysis_cluster_aware.json"
+    output_file = "summary/quantization_analysis.json"
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     
     summary = {
