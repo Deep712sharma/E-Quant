@@ -6,7 +6,8 @@ from integrate_entropy_model import (
     apply_entropy_aware_quantization,
     modify_forward_for_entropy_quant,
     save_entropy_models,
-    load_entropy_models
+    load_entropy_models,
+    find_matching_layer
 )
 sys.path.append("./mainldm")
 sys.path.append("./mainddpm")
@@ -253,7 +254,7 @@ if __name__ == "__main__":
     
     parser.add_argument("--use_cluster_quant", action="store_true", default=True,
                     help="Use cluster-based mixed precision quantization")
-    parser.add_argument("--clustering_dir", type=str, default="./clustering_output",
+    parser.add_argument("--clustering_dir", type=str, default="./clustering_per_layer",
                     help="Directory with pre-computed clustering files")
     
     parser.add_argument("--use_entropy_model", action="store_true", default=False,
@@ -340,6 +341,15 @@ if __name__ == "__main__":
                 num_entropy_iters=args.entropy_iters
             )
             
+            if args.train_entropy:
+                logger.info("Saving trained entropy models...")
+                save_entropy_models(cluster_quantizers, args.entropy_models_path)
+                logger.info(f"Entropy models saved at {args.entropy_models_path}")
+            else:
+                logger.info("Skipping save — entropy model was not trained (loading mode).")
+                logger.info("Loading pretrained entropy models...")
+                save_entropy_models(cluster_quantizers, args.entropy_models_path)
+
             logger.info("\n🔧 Pre-quantizing weights for efficient inference...")
             quantized_count = 0
             
