@@ -37,5 +37,5 @@ python ./mainldm/celeb_params.py
 python ./mainldm/celeb_clustering_per_layer.py
 ```
 ```bash
-python ./mainldm/celeb_quant.py --train_entropy --use_cluster_quant --use_entropy_model --entropy_iters 1000 --clustering_dir ./clustering_per_layer
+python ./mainldm/celeb_quant.py --use_cluster_quant --use_entropy_model --entropy_iters 1000 --clustering_dir ./clustering_per_layer --entropy_models_path ./entropy.pth
 ```
